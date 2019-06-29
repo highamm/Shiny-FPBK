@@ -1,0 +1,10 @@
+name: fpbkshinyapp
+title:
+username:
+account: matt-higham
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 963745
+bundleId: 2129797
+url: https://matt-higham.shinyapps.io/fpbkshinyapp/
+when: 1559666050.4011

@@ -1,0 +1,261 @@
+---
+title: "Using the GSPE Shiny App"
+author: "Matt Higham"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    fig_caption: yes
+vignette: >
+  %\VignetteIndexEntry{Using the GSPE R Package}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup2, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  echo = FALSE
+)
+library(pander)
+library(ggplot2)
+```
+
+
+## Introduction
+
+The purpose of this vignette is to illustrate how to use the GSPE `R Shiny` app for moose survey data, both with and without a separate sightability study. There are three primary sections, each building off the previous section. Throughout the Vignette, we will use simulated data that is similar to a survey and sightability trials in March 2017 at the Togiak National Wildlife Refuge. Note, however, that the data and locations are altered for privacy. Though some of the documentation references moose specifically, the app can be used for many ecological studies with count data collected on a finite number of sites.
+
+- Section 1 shows how to obtain a population prediction assuming perfect detection.
+- Section 2 shows how to obtain a population prediction assuming constant detection across all sites. This requires the user to have an estimate for mean detection with a standard error.
+- Section 3 shows how to obtain a population prediction using radiocollar data with the possibility of site covariates useful for predicting detection. This requires the user to have a separate data set with sightability trials using radiocollared animals.
+
+If using the app for the first time, we recommend making sure that the steps in Section 1 work first before trying to add sightability to the model. Before looking at the `Shiny` app, let's first examine the example data set we will be using.
+
+## Example Data
+
+As mentioned above, we will use an example data set to illustrate how to use the `Shiny` app. If desired, one can download the example data set from INSERT URL HERE and follow along. Though we have sightability trials for this particular data set, suppose first that we want to assume perfect detection. Like many moose data sets, the the sites in our example data set are stratified into a "High" stratum and a "Low" stratum. Let's take a look at the data set.
+
+```{simdata, eval = FALSE, echo = FALSE, include = FALSE}
+set.seed(21214)
+detpredictor1 <- runif(50, 0, 1)
+detpredictor2 <- runif(50, -2, 2)
+
+beta0 <- 1; beta1 <- 0.5; beta2 <- 0.25
+
+detectionvar <- rbinom(50, 1,
+  exp(beta0 + beta1 * detpredictor1 + beta2 * detpredictor2) / 
+  (1 + exp(beta0 + beta1 * detpredictor1 + beta2 * detpredictor2)))
+
+radiocollartab <- cbind(detectionvar, detpredictor1, detpredictor2)
+radiocollardataset <- data.frame(radiocollartab)
+colnames(radiocollardataset) <- c("Detected", "DetPred1", 
+  "DetPred2")
+write.csv(radiocollardataset, "vignettedetection.csv")
+
+ncount <- 400
+xcoords <- seq(0, 1, length.out = round(sqrt(ncount)))
+ycoords <- seq(0, 1, length.out = round(sqrt(ncount)))
+allcoords.grid <- expand.grid(xcoords, ycoords)
+
+Sigmat.All <- matrix(NA, nrow = ncount, ncol = ncount)
+
+countpredictor1 <- rnorm(ncount, 4, 2)
+beta0count <- -2
+beta1count <- -0.5
+
+beta0count + beta1count * countpredictor1
+countpredictorstrat <- factor(sample(c("High", "Low"), size = ncount,
+  prob = c(0.3, 0.7), replace = TRUE))
+beta2count <- 9
+
+Xdes <-  matrix(cbind(rep(1, times = ncount),
+  countpredictor1, countpredictorstrat), ncol = 3)
+mu <- Xdes %*% matrix(c(beta0count, beta1count, beta2count))
+
+dismat.all <- as.matrix(stats::dist(as.matrix(allcoords.grid),
+  diag = TRUE, upper = TRUE))
+parsil <- 50; nugget <- 70; range <- 1
+
+Sigmat.All <- parsil * exp(-dismat.all / range)
+Sigmat.All2 <- as.matrix(diag(nugget, nrow = nrow(Sigmat.All))) +
+    as.matrix(Sigmat.All)
+
+Dchol <- chol(Sigmat.All2)
+
+## use cholesky decomposition to generate counts
+z <- as.vector(round(mu + t(Dchol) %*% rnorm(ncount)))
+z
+## assign any negative counts to 0
+z[z < 0] <- 0
+moose <- z
+
+detpredictorall1 <- runif(ncount, 0, 1)
+detpredictorall2 <- runif(ncount, -2, 2)
+
+truedetprobs <- exp(beta0 + beta1 * detpredictorall1 +
+    beta2 * detpredictorall2) / 
+  (1 + exp(beta0 + beta1 * detpredictorall1 +
+      beta2 * detpredictorall2))
+obscounts <- rbinom(moose, size = moose, prob = truedetprobs)
+
+countdf <- data.frame(allcoords.grid, obscounts, countpredictor1,
+  detpredictorall1, detpredictorall2, countpredictorstrat)
+reorderindx <- sample(1:ncount, size = ncount, replace = FALSE)
+countdf$areavar <- rep(2, ncount)
+
+countdford <- countdf[reorderindx, ]
+colnames(countdford) <- c("Xcoords", "Ycoords", "Moose", "CountPred",
+  "DetPred1", "DetPred2", "Stratum", "Area")
+sampledsiteindx <- c(sample(which(countdford$Stratum == "High"), size = 60, replace = FALSE), sample(which(countdford$Stratum == "High"), size = 40, replace = FALSE))
+countdford[-sampledsiteindx, ]$Moose <- NA
+
+write.csv(countdford, "vignettecount.csv")
+```
+
+```{showdata, echo = FALSE}
+simdf <- read.csv("vignettecount.csv")
+pander(head(simdf[ ,c("Xcoords", "Ycoords", "Moose",
+  "CountPred", "Stratum")]))
+```
+
+The data table shows the first six observations of our data set. The first two columns represent spatial x and y coordinates for the centroids of each site, the next column `Moose` is the observed number of moose on each site with an `NA` value for any site that is not sampled, `CountPred` is a continuous predictor for the abundance of moose on each site (like some habitat covariate), and `Stratum` is the pre-survey stratification scheme into `High` and `Low` strata. 
+
+_Note_: Both the `R` package and the `Shiny` app assume that any site that is not sampled has `NA` for the column with the count. If data are input into Excel and unsampled sites have blank cells for the `Moose` column, then `R` and `Shiny` will automatically populate the blank cells with `NA`'s. 
+
+We might also want to look at a grid to see where our sampled sites are.
+
+```{showgrid, echo=FALSE}
+minxdist <- min(dist(simdf$Xcoords)[dist(simdf$Ycoords) != 0])
+minydist <- min(dist(simdf$Xcoords)[dist(simdf$Ycoords) != 0])
+simdf$sampind <- factor(is.na(simdf$Moose))
+levels(simdf$sampind)[1] <- "Sampled"
+levels(simdf$sampind)[2] <- "Unsampled"
+
+p3 <- ggplot(data = simdf, aes(x = Xcoords, y = Ycoords,
+  colour = as.factor(sampind))) +
+  scale_colour_viridis_d("Sampling Indicator", begin = 0.2,
+    end = 0.9) +
+  geom_point() +
+  xlab("X Coordinates") + ylab("Y Coordinates") +
+  ggtitle("Grid of Sites Showing Which Were Sampled")
+print(p3)
+```
+
+We can also look at a grid showing which sites were stratified into the high stratum and which were stratified into the low stratum.
+
+```{stratgrid, echo=FALSE}
+stratgrid <- ggplot(data = simdf, aes(x = Xcoords, y = Ycoords,
+  colour = Stratum)) +
+  scale_colour_viridis_d("Stratum", begin = 0.2,
+    end = 0.9) +
+  geom_point() +
+  xlab("X Coordinates") + ylab("Y Coordinates") +
+  ggtitle("Grid of Sites Showing How Sites Were Stratified")
+print(stratgrid)
+```
+
+## Assuming Perfect Detection
+
+Let's first assume that we have perfect sightability. Then, in the `Shiny` app, we can completely ignore the "Radiocollar Sightability" tab and focus only on the "GSPE" tab. 
+
+#### Step 1: Load the `Shiny` app.
+
+You will need to open `R` or `RStudio` on your personal desktop and run the following lines of code:
+
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+## only run this first line if you have not installed the devtools
+## package ever before on your current machine.
+install.packages("devtools") 
+library(devtools)
+
+## these load the block kriging package used in the Shiny app
+devtools::install_git("https://github.com/highamm/FPBKPack2.git")
+library(FPBKPack2)
+
+## will also need to install the shiny package if you have not done 
+## so ever before on your current machine.
+install.packages("shiny")
+library(shiny)
+```
+
+CHANGE: Somehow, they will need to source the app....this app could live on the Github page. After the appropriate packages are loaded, run the following line to load the `Shiny` app.
+
+```{r, echo=TRUE}
+source("~/Desktop/FPBKShiny/FPBKShinyApp/app.R")
+runGitHub("shiny_example", "rstudio")
+```
+
+
+```{r}
+## Next Steps:
+## 
+## 1. Simulate Count Data Set
+## 2. Make tables and graphs showing the example count data set
+## 3. Begin with perfect detection in the vignette
+## 4. Move to constant detection
+## 5. Make tables and graphs showing the detection data set
+## 6. Move to Radiocollar Data
+## 7. Write conclusion and send email to McCrea
+
+#exampledataset$stratvar <- c(rep("High", 23),
+#  rep("Low", 17))
+#write.csv(exampledataset, "exampledataset.csv", append = FALSE)
+```
+
+```{TogiakData, echo = FALSE, eval = FALSE}
+library(devtools)
+devtools::install_git("https://github.com/highamm/FPBKPack2.git")
+library(FPBKPack2)
+marchlowsamp <- read.csv("~/Desktop/BayesianCode/marchlowsamp.csv")
+marchhighsamp <- read.csv("~/Desktop/BayesianCode/marchhighsamp.csv")
+marchdet <- read.csv("~/Desktop/BayesianCode/marchdet.csv")$x
+MarchSight <- read.csv("~/Desktop/FPBKPaperKnitr/MarchSight.csv")
+MarchSight2 <- MarchSight[1:50, ]
+
+MarchSight2$SU. <- MarchSight2$SU..
+
+MarchSight2$Detected. <- as.numeric(as.factor(MarchSight2$Detected.)) - 2
+
+MarchSight2 <- MarchSight2[ ,c("SU.", "Detected.")]
+marchdet <- MarchSight2$Detected.
+
+
+marchlowunsamp <- read.csv("~/Desktop/BayesianCode/marchlowunsamp.csv")
+marchhighunsamp <-read.csv("~/Desktop/BayesianCode/marchhighunsamp.csv")
+GSPE_habitats <- read.csv("~/Desktop/FPBKPaperKnitr/GSPE_habitats.csv")
+GSPE_habitatssub <- GSPE_habitats[ ,c("ID", "Willow", "Alder")]
+
+GSPE_habitatssub$SU. <- GSPE_habitatssub$ID
+sightdf <- merge(MarchSight2, GSPE_habitatssub, by = "SU.",
+  all.x = TRUE)[ ,-3]
+
+
+lowdf <- rbind(marchlowsamp, marchlowunsamp)
+
+sampleddf <- rbind(marchlowsamp, marchhighsamp)
+alldf <- rbind(marchlowsamp, marchhighsamp, marchlowunsamp,
+  marchhighunsamp)
+
+
+alldfwithcovs <- merge(alldf, GSPE_habitatssub,
+  by.x = "marchid", by.y = "SU.")
+highdfwithcovs <- subset(alldfwithcovs, marchstrat == "High")
+lowdfwithcovs <- subset(alldfwithcovs, marchstrat == "Low")
+alldfdisplay <- alldf[c(1:3, 110:113, 204:206, 1100:1103),
+  c(2, 3, 4, 5, 6, 7)]
+knitr::kable(alldfdisplay)
+```
+
+
+One aspect of the data set to note is that all of the counts on unsampled sites are given as `NA` values. By default, if uploading an Excel spreadsheet or a .csv file into `R`, any blank cells are converted to `NA` values. So, unsampled sites should have `NA` count values (not `-9999` or `NotSampled`, etc.) before using the package functions.
+
+We can also look at a map of the stratification:
+
+```{r, include=TRUE, fig.align="center", fig.cap=c("Togiak Stratifiacation"), echo=FALSE, eval = FALSE}
+knitr::include_graphics("strat1-1.pdf")
+```
+
+## Section 1: Perfect Detection
+
+The results from this section should match with results from using Winfonet to obtain a prediction for the population total in a region of interest. 

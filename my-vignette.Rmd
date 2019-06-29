@@ -1,0 +1,333 @@
+---
+title: "Using the GSPE R Package"
+author: "Matt Higham"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    fig_caption: yes
+vignette: >
+  %\VignetteIndexEntry{Using the GSPE R Package}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup2, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+The purpose of this vignette is to illustrate how to use the GSPE `R` Package for moose survey data, both with and without a separate sightability study. There are three primary sections, each building off the previous section. Throughout the Vignette, a moose survey from Togiak National Wildlife Refuge is used as an example. Both the survey and the sightability trials took place in March 2017. Though some of the documentation references moose specifically, the package can be used for many ecological studies with count data collected on a finite number of sites.
+
+- Section 1 shows how to obtain a population prediction assuming perfect detection.
+- Section 2 shows how to obtain a population prediction assuming constant detection across all sites.
+- Section 3 shows how to obtain a population prediction using radiocollar data with the possibility of site covariates useful for predicting detection.
+
+##Section 1: Perfect Detection
+
+As mentioned above, we will use a March 2017 moose survey in the Togiak National Wildlife Refuge. Though we have sightability trials for this particular data set, suppose first that we want to assume perfect detection. Like many moose data sets, the Togiak sites are stratified into a "High" strata and a "Low" strata. Let's take a look at the data set and at an accompanying map of the stratification.
+
+```{r, echo = FALSE}
+set.seed(392019)
+library(FPBKPack2)
+marchlowsamp <- read.csv("~/Desktop/BayesianCode/marchlowsamp.csv")
+marchhighsamp <- read.csv("~/Desktop/BayesianCode/marchhighsamp.csv")
+marchdet <- read.csv("~/Desktop/BayesianCode/marchdet.csv")$x
+MarchSight <- read.csv("~/Desktop/FPBKPaperKnitr/MarchSight.csv")
+MarchSight2 <- MarchSight[1:50, ]
+
+MarchSight2$SU. <- MarchSight2$SU..
+
+MarchSight2$Detected. <- as.numeric(as.factor(MarchSight2$Detected.)) - 2
+
+MarchSight2 <- MarchSight2[ ,c("SU.", "Detected.")]
+marchdet <- MarchSight2$Detected.
+
+
+marchlowunsamp <- read.csv("~/Desktop/BayesianCode/marchlowunsamp.csv")
+marchhighunsamp <-read.csv("~/Desktop/BayesianCode/marchhighunsamp.csv")
+GSPE_habitats <- read.csv("~/Desktop/FPBKPaperKnitr/GSPE_habitats.csv")
+GSPE_habitatssub <- GSPE_habitats[ ,c("ID", "Willow", "Alder")]
+
+GSPE_habitatssub$SU. <- GSPE_habitatssub$ID
+sightdf <- merge(MarchSight2, GSPE_habitatssub, by = "SU.",
+  all.x = TRUE)[ ,-3]
+
+
+lowdf <- rbind(marchlowsamp, marchlowunsamp)
+
+sampleddf <- rbind(marchlowsamp, marchhighsamp)
+alldf <- rbind(marchlowsamp, marchhighsamp, marchlowunsamp,
+  marchhighunsamp)
+
+
+alldfwithcovs <- merge(alldf, GSPE_habitatssub,
+  by.x = "marchid", by.y = "SU.")
+highdfwithcovs <- subset(alldfwithcovs, marchstrat == "High")
+lowdfwithcovs <- subset(alldfwithcovs, marchstrat == "Low")
+```
+
+The title of the data set is `alldf` and is excluded here for privacy restrictions.
+
+```{r, echo = TRUE}
+alldfdisplay <- alldf[c(1:3, 110:113, 204:206, 1100:1103),
+  c(2, 3, 4, 5, 6, 7)]
+knitr::kable(alldfdisplay)
+```
+
+One aspect of the data set to note is that all of the counts on unsampled sites are given as `NA` values. By default, if uploading an Excel spreadsheet or a .csv file into `R`, any blank cells are converted to `NA` values. So, unsampled sites should have `NA` count values (not `-9999` or `NotSampled`, etc.) before using the package functions.
+
+We can also look at a map of the stratification:
+
+```{r, include=TRUE, fig.align="center", fig.cap=c("Togiak Stratifiacation"), echo=FALSE, eval = FALSE}
+knitr::include_graphics("strat1-1.pdf")
+```
+
+####R Shiny App
+Much of the functionality of this package will be made available in an `R Shiny` app to be developed before the end of summer of 2019. The following Vignette shows how to use the package in `R` or `RStudio` directly. 
+
+####Package Functions
+
+There are three main functions that a user would call to obtain the population prediction. They are:
+
+- `slmfit`(Spatial Linear Model fit), used to fit covariance parameter estimates and obtain estimated regression coefficients,
+- `predict`, used to do the spatial prediction, and
+- `FPBKoutput` to obtain a report similar to the WinfoNet report.
+
+Most of the remainder of the functions in the package are helper functions called within the three main functions above.
+
+#### The `slmfit` Function
+
+`slmfit` has the most user inputs, including:
+
+- `formula`, an `R` formula in the form `response ~ predictor1 + 
+predictor2 + ...`
+- `data`, the full data set containing both sampled and unsampled observations, including the predictors, the response, and
+the spatial coordinates.
+- `xcoordcol`, the name of the column containing x-coordinates, in quotes.
+- `ycoordcol`, the name of the column containing y-coordinates, in quotes.
+- `CorModel`, the covariance structure, defaulting to `"Exponential"` with `"Gaussian"` and `"Spherical"` as other possiblities.
+- `areacol`, the name of the column with site areas. If omitted, sites are assumed to have equal area.
+- a few other optional arguments.
+
+The `formula` input allows the user to put in categorical or continuous covariates that are thought to be associated with site count totals (eg. habitat covariates). For the Togiak March analysis, we do not have any such covariates so the formula used is `response ~ 1`. Throughout the package, we try to keep as much of the syntax as similar as possible to `R`'s `lm` function in the hopes that a new user already familiar with `lm` can more easily use the package. 
+
+Let's first begin by obtaining a prediction for the population total in the high stratum. For this data set, the coordinates have already been converted from Latitude/Longitude coordinates into UTM coordinates. For the Togiak March data set, the input would look like:
+
+```{r, echo = TRUE}
+highdf <- rbind(marchhighsamp, marchhighunsamp)
+slmobj <- slmfit(formula = marchtot ~ 1,
+  data = highdf,
+  xcoordcol = "marchlatUTM",
+  ycoordcol = "marchlonUTM",
+  CorModel = "Exponential",
+  areacol = "marcharea")
+```
+
+The `slmobj` has **a lot** of information within it. One of the things we'd like to include is a `summary` function that summarizes some key components to the user. With the `summary` function, the user would be able to use his or her own model selection procedures and verify that `slmfit` is fitting the model reasonably. For now, we can examine the coefficient estimates and the spatial parameter estimates.
+
+```{r, echo = TRUE}
+slmobj$CoefficientEsts
+slmobj$SpatialParmEsts
+```
+
+When `areacol` is included, then the spatial prediction utilizes densities, not counts. So, the coefficient estimate is the estimate the mean density in the high stratum. The densities are transformed back to counts in the `predict` function, which is described next.
+
+#### The `predict` Function
+
+The user then inputs the object created by `slmfit` to the `predict` function. The `predict` function has the following arguments:
+
+- `object`, a named model object from `slmfit`.
+- `FPBKcol`, the name of the column in the data set with prediction weights. If omitted, the `predict` function predicts the population total.
+- a few other arguments.
+
+```{r, echo = TRUE}
+predobj <- predict(object = slmobj)
+```
+
+I've left the `FPBKcol` out for this example, resulting in a prediction for the population total. The `predict` function contains the prediction for the population total, the prediction variance, and the data set that the user input to `slmfit` with the following columns appended:
+
+- `response_pred`, the site-by-site predictions.
+- `response_predvar`, the site-by-site prediction variances.
+- `response_sampind`, an indicator column of which sites were sampled.
+- `response_muhat`, a column of means for the density at each site.
+
+Some of these features are summarized in the following output function that generates a mini-report. However, having the appended data set available to the user can be beneficial to anyone who might want to obtain their own specific summary statistics, graphics, etc. using `R` or other software like GIS.
+
+#### The `FPBKoutput` Function
+
+Finally, the user can run the `FPBKoutput` function (Finite Population Block Kriging output, the name of which might change in the future). I've tried to structure much of the report output to be as similar to the WinfoNet output as possible. If using the package through the future `R Shiny` app, this report is what would be output from the app in addition to a .csv file with the data set from `predict`. Inputs to `FPBKoutput` include:
+
+- `pred_info`, the object generated from `predict`.
+- `conf_level`, the desired confidence level for prediction intervals. By default, the output returns 80%, 90%, and 95% prediction intervals.
+- `get_krigmap`, `get_sampdetails`, `get_variogram`, are options to get a plot of the predictions, get some tables with details of the sampling, get a variogram of the residuals with the fitted model, and get an HTML report, respectively. These are set to `FALSE` by default.
+
+```{r, echo = TRUE, eval = TRUE}
+FPBKoutput(pred_info = predobj,
+  conf_level = c(0.80, 0.90, 0.95),
+  get_krigmap = TRUE, get_sampdetails = TRUE,
+  get_variogram = TRUE)
+```
+
+The output is displayed here in the vignette but looks much prettier in the report that is (currently) output to the user's desktop.
+
+#### A couple of extra notes
+
+Almost all of the sites in the Togiak National Wildlife Refuge have approximately equal area. Therefore, if we repeat the prediction but ignore area:
+
+```{r, echo = TRUE}
+slmobj_noarea <- slmfit(formula = marchtot ~ 1,
+  data = highdf,
+  xcoordcol = "marchlatUTM",
+  ycoordcol = "marchlonUTM",
+  CorModel = "Exponential",
+  areacol = NULL)
+predobj_noarea <- predict(object = slmobj_noarea)
+predobj$FPBK_Prediction
+sqrt(predobj$PredVar)
+predobj_noarea$FPBK_Prediction
+sqrt(predobj_noarea$PredVar)
+```
+
+We obtain almost the same exact prediction and prediction variance. Inclusion of a column for area is only really important if sites have drastically different areas. One example is data that would be obtained in counties in the United States. 
+
+Secondly, there is a choice of how to include stratification in the estimator. In the current WinfoNet estimator, strata are treated completely separately in the predictions. In other words, we get a prediction, covariance parameter estimates, etc. for the low stratum and a prediction, covariance parameter estimates, etc. for the high stratum. Our total prediction is simply the sum of the stratum predictions. The extra assumption that we make is that there is no **cross-correlation** across the strata. If implementing this method, we would re-run the `slmfit`, `predict` and `FPBKoutput` functions again with data from the low stratum. It would also be possible in the future to include an option for the user to input stratum specifically and have the package automatically compute the strata predictions without having to run the functions twice (or more for even more strata) if this functionality is desired. 
+
+Another choice is to include stratification as a covariate in the `formula` part of the linear model. The extra assumption that we would make using this method is that the spatial autocorrelation structure  is similar in each of the strata but that the means of the strata are different. As many strata can be included in this predictor as needed. In the case of the Togiak March moose data, this assumption does not seem to be reasonable, as the high stratum has substantially more variability and more spatial autocorrelation than the low stratum does. However, if this seems reasonable in other data sets, the code for `slmfit` would be:
+
+```{r, echo = TRUE}
+slmobj_cov <- slmfit(formula = marchtot ~ marchstrat, ## add 
+  ## marchstrat as a predictor
+  data = alldf, ## change the data set to have all sites
+  xcoordcol = "marchlatUTM",
+  ycoordcol = "marchlonUTM",
+  CorModel = "Exponential",
+  areacol = "marcharea")
+```
+
+## Section 2: Constant Detection Across Sites
+
+If we make the assumption that detection is approximately equal across all sites in the study region, then we can input an estimate of mean detection and its standard error into `predict` to obtain a prediction for the population total adjusted for mean detection. The estimate of mean detection and its standard error can be obtained from a variety of methods (radiocollars, double sampling, etc.). The package performs block kriging (spatial prediction) using the observed counts and then adjusts for detection in `predict`, obtaining a prediction variance using the delta method. 
+
+To add arguments for this adjustment in the package, there is an argument to `predict` called `detinfo`. By default, `detinfo = c(1, 0)`, indicating perfect detection (`1`) and no variability about that estimate for detection (`0`). Suppose that we estimate detection to be `0.84` with a standard error of `0.052`. For the high stratum in the Togiak March moose survey, the code to adjust for detection in this way is:
+
+```{r, echo = TRUE}
+slmobj_det <- slmfit(formula = marchtot ~ 1,
+  data = highdf,
+  xcoordcol = "marchlatUTM",
+  ycoordcol = "marchlonUTM",
+  CorModel = "Exponential",
+  areacol = "marcharea")
+
+## add detinfo argument here
+predobj_det <- predict(object = slmobj_det, detinfo = c(0.84, 0.052))
+predobj_det$FPBK_Prediction
+sqrt(predobj_det$PredVar)
+```
+
+Note that the code for `slmfit` remains the same while there is one additional argument to `predict`. As expected, our prediction for the population total increases when we take into account imperfect detection. Additionally, imperfect detection increases our uncertainty about the prediction, so our prediction error also increases when we include imperfect detection. 
+
+To obtain an estimator for the entire region, we would again repeat the process using data from the low stratum.
+
+## Section 3: Estimating Detection Using Logistic Regression on Radiocollar Data
+
+For the March Togiak data, the assumption of constant detection across sites does not seem unreasonable. We do not have any habitat covariates that are strongly associated with detection in the March sightability trials. However, for the purpose of this vignette, suppose that we would like to estimate detection using the proportion of Willow on each site and the proportion of Alder on each site. 
+
+Let's first examine our sightability data set (which contains the data on the sightability trials):
+
+```{r, echo = TRUE}
+knitr::kable(sightdf[1:7, ])
+```
+
+In order to get detection estimates using logistic regression, we use the `get_detection` function within this package. The `get_detection` function only has three arguments:
+
+- `formula`, an R formula of the form `response ~ pred1 + pred2 + ...`, where the `response` is the name of the column with the sightability successes and failures, and `pred1`, `pred2`, etc. are the predictors thought to be useful for predicting detection.
+- `data` is the name of the data set with the sightability trials.
+- `varmethod` is the method used to obtain the variance of the detection estimates, either `"Bootstrap"` by default or `"Delta"`. 
+
+```{r, echo = TRUE, warning = FALSE}
+det_info <- get_detection(formula = Detected. ~ Willow + Alder,
+  data = sightdf,
+  varmethod = "Bootstrap")
+```
+
+The object `det_info` contains the information necessary for `slmfit`, `predict` and `FPBKoutput` to construct the prediction for the population total, adjusted for different detection across sites. The only extra argument is needed in `slmfit`. The argument `detectionobj` is, by default set to `NULL`. If we add the `det_info` output as its argument and proceed with `predict` and `FPBKoutput` with no other differences, we obtain the prediction adjusted for imperfect detection.
+
+The only other aspect of the functions to note here is that the data set in `slmfit` **MUST** have columns with the same predictors as those used in `get_detection`. The names of these columns must be exactly the same in both data sets. For example, if I named the willow variable `Willow` in the sightability data set but `will` in the full data set, the package does not know that these are actually referring to the same variable. The data set `highdfwithcovs` includes columns for `Willow` and `Alder` within the data frame.
+
+We already noted that using stratum as a covariate in the Togiak March moose survey makes less sense than treating the strata separately. So, let's obtain a prediction for the high stratum and a separate prediction for the low stratum, adjusting for imperfect detection using logistic regression. For the high stratum:
+
+```{r, echo = TRUE}
+slmobj_dethigh <- slmfit(formula = marchtot ~ 1,
+  data = highdfwithcovs,
+  xcoordcol = "marchlatUTM",
+  ycoordcol = "marchlonUTM",
+  CorModel = "Exponential",
+  estmethod = "ML",
+  areacol = "marcharea",
+  detectionobj = det_info)
+
+predobj_dethigh <- predict(object = slmobj_dethigh)
+predobj_dethigh$FPBK_Prediction
+```
+
+And for the low stratum:
+
+```{r, echo = TRUE}
+slmobj_detlow <- slmfit(formula = marchtot ~ 1,
+  data = lowdfwithcovs,
+  xcoordcol = "marchlatUTM",
+  ycoordcol = "marchlonUTM",
+  CorModel = "Exponential",
+  areacol = "marcharea",
+  detectionobj = det_info)
+predobj_detlow <- predict(object = slmobj_detlow)
+predobj_detlow$FPBK_Prediction
+```
+
+Our prediction for the total is then `r round(predobj_dethigh$FPBK_Prediction + predobj_detlow$FPBK_Prediction)` after adjusting for imperfect detection. For the high stratum, let's look at the map of predictions, and some summary statistics:
+
+```{r, echo = TRUE}
+FPBKoutput(pred_info = predobj_dethigh,
+  get_krigmap = TRUE, get_sampdetails = TRUE)
+```
+
+Again, the output looks nicer in the report or in the `RStudio` plotting window.
+
+####Predicting for a Quantity Other than the Population Total.
+
+Be default, the functions within this package assume that the goal is to predict the population total across all sites. Another goal that managers might have is to predict the total in a specific section of the larger study area (for example, a game management unit). In order to predict a quantity other than the total, the user must specify the name of the column in the data set that has the desired prediction weights. A `1` or `TRUE` in the prediciton weight column corresponds to a site that should be included in the prediction while a `0` or `FALSE` corresponds to a site that should not be included in the prediction. For example, if I only want to predict the total for the high stratum sites in the Togiak region with an SU number less than or equal to 700, I would define my prediction weight column as:
+
+```{r, echo = TRUE}
+highdfwithcovs$predwts <- highdfwithcovs$marchid <= 700
+knitr::kable(highdfwithcovs[134:140, c("marchid", "predwts")])
+```
+
+Then, in the `predict` function, I would include the `FPBKcol` argument and give the name of the column with the prediction weights:
+
+```{r, echo = TRUE}
+slmobj_dethigh <- slmfit(formula = marchtot ~ 1,
+  data = highdfwithcovs,
+  xcoordcol = "marchlatUTM",
+  ycoordcol = "marchlonUTM",
+  CorModel = "Exponential",
+  estmethod = "ML",
+  areacol = "marcharea",
+  detectionobj = det_info)
+predobj_dethigh <- predict(object = slmobj_dethigh,
+  FPBKcol = "predwts") ## added FPBKcol argument here
+predobj_dethigh$FPBK_Prediction
+sqrt(predobj_dethigh$PredVar)
+```
+
+The resulting prediction and standard error are then associated with the region of interest. In the future, it would also be possible to have the function automatically predict the population total in addition to the total in the region of interest. I wasn't sure if this feature would be desirable or not so left it out for now.
+
+## Conclusion
+
+We have used the `FPBKPack2` to predict the moose population total in the Togiak National Wildlife Refuge with the three main functions `slmfit`, `predict`, and `FPBKoutput`. Both the structure of the data needed to be input into the functions and the output report constructed from using the functions are meant to be similar to the WinfoNet input and output. While this Vignette is currently not on Github due to data privacy, the rest of the package is available there. 
+
+([Link to Github Page](https://github.com/highamm/FPBKPack2))
+
