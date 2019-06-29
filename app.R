@@ -79,6 +79,10 @@ ui <- fluidPage(
         numericInput('SEdetection',
           'Enter Standard Error for Detection:', value = 0,
           min = 0, max = Inf),
+        radioButtons("latlon", "Latitude / Longitude?",
+          choices = c(Yes = "Yes",
+            No = "No"),
+          selected = "2"),
         actionButton("go", "Submit"),
           
         
@@ -209,6 +213,20 @@ server <- function(input, output, session) {
     ##print(summary(lmobj))
   })
   
+  df_test = reactive({
+    df_new = datare()
+    if(input$latlon == "Yes") {
+      df_new$xcoordcol22 <- LLtoUTM(cm = base::mean(datare()[ ,input$xcoords]),
+        lat = datare()[ ,input$ycoords],
+        lon = datare()[ ,input$xcoords])$xy[ ,1]
+      
+      
+    } else if (input$latlon == "No") {
+      df_new$xcoordcol22 <- datare()$input$xcoords
+    }
+    df_new
+  })
+  
  # lmod <- reactive({ 
 #    mod1 <- lm(input$resp ~ 1, data = values$df)
 #  })
@@ -238,10 +256,11 @@ server <- function(input, output, session) {
     #radiocollardataout <- modelfitradiocollar()
 
    datare()
-    
+   
    if (input$go == 0) {
      return()
    } else { 
+     
      ## isolate wraps this so that it doesn't automatically
      ## update after submit is hit for the first time
     isolate(if (sum(input$strat == "None") >= 1) {
