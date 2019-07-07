@@ -146,7 +146,7 @@ ui <- fluidPage(
            h3("Basic Information"),
            "To run the application, use the following steps. There is also more detail about each step in the accompanying Vignette",
            tags$ol(
-             tags$li("Upload data set from your local computer. The data set should be a .csv file and contain information on both the sampled and unsampled sites. The minimum that the data set should have are a column of observed counts, x-coordinates, y-coordinates, and any strata or other predictors."), 
+             tags$li("Upload a data set from your local computer. The data set should be a .csv file and contain information on both the sampled and unsampled sites. The minimum that the data set should have are a column of observed counts, x-coordinates, y-coordinates, and any strata or other predictors."), 
              tags$li("If you do not have radiocollar data, then skip this step. If you do have radiocollar data, click the Radiocollar Sightability tab at the top center of the webpage. Upload your radiocollar data from a .csv file, which should, at minimum contain a column for whether or not each radiocollared animal was sighted. Choose the detection column and any relevant predictors for detection and then click the Submit button. If the informal output looks appropriate and there are not error messages, go back to the GSPE tab and continue with the remainder of the steps."),
              tags$li("Select the appropriate columns for the counts, coordinates, and predictors from the drop-down menus."), 
              tags$li("If you have an estimate for mean detection and a standard error, put in this estimate here. Note that this is separate from the sightability trials: if you've uploaded sightability data, then the model is already accounting for imperfect detection and these can be left as is! Uploading sightability data and putting in values for mean detection result in adjusting for sightability twice, which is not what we want. See the accompanying vignette for more information."),
@@ -182,14 +182,7 @@ server <- function(input, output, session) {
       sep = input$sep)#,
      # quote = input$quote)
     
-
-    
- #   if(input$disp == "head") {
       return(head(df))
-#    }
-#    else {
-#      return(df)
-#    }
   
   })
   
@@ -224,9 +217,6 @@ server <- function(input, output, session) {
       choices = c("None", names(df)), selected = "None")
     
     return(df)
-    
-    ##lmobj <- lm(input$resp ~ 1, na.rm = TRUE, data = df)
-    ##print(summary(lmobj))
   })
 
 
@@ -298,6 +288,7 @@ server <- function(input, output, session) {
             detectionobj = NULL,
             detinfo = c(input$detection, input$SEdetection),
             areacol = areavar,
+            FPBKcol = FPBKvar,
             stratcol = input$strat)
     }
       })
@@ -310,37 +301,37 @@ server <- function(input, output, session) {
   modelfit2 <- reactive({
     req(input$file1)
     req(input$file2)
-
+    
     datare()
     
     if (input$godetection == 0 | input$go == 0) {
       return()
     } else {
- 
-    isolate({
       
-      if (sum(input$preds == "None") >= 1) {
-        formtouse <- as.formula(paste(input$resp, "~",
-          1, sep = "")) 
-      } else {
-        formtouse <- as.formula(paste(input$resp, "~",
-          paste(input$preds, collapse="+"), sep = ""))
-      }
-      
-      if (sum(input$area == "None") >= 1) {
-        areavar <- NULL
-      } else {
-        areavar <- input$area
-      }
-      
-      if (sum(input$predwtscol == "None") >= 1) {
-        FPBKvar <- NULL
-      } else {
-        FPBKvar <- input$predwtscol
-      }
-      
-      if (sum(input$strat == "None") >= 1) {
-      
+      isolate({
+        
+        if (sum(input$preds == "None") >= 1) {
+          formtouse <- as.formula(paste(input$resp, "~",
+            1, sep = "")) 
+        } else {
+          formtouse <- as.formula(paste(input$resp, "~",
+            paste(input$preds, collapse="+"), sep = ""))
+        }
+        
+        if (sum(input$area == "None") >= 1) {
+          areavar <- NULL
+        } else {
+          areavar <- input$area
+        }
+        
+        if (sum(input$predwtscol == "None") >= 1) {
+          FPBKvar <- NULL
+        } else {
+          FPBKvar <- input$predwtscol
+        }
+        
+        if (sum(input$strat == "None") >= 1) {
+          
           fit <- slmfit(formula = formtouse,
             data = datare(),
             xcoordcol = input$xcoords,
@@ -352,19 +343,19 @@ server <- function(input, output, session) {
             detectionobj = modelfitradiocollar(),
             areacol = areavar)
           
-        
+          
           predfit <- predict(fit, FPBKcol = FPBKvar,
             detinfo = c(input$detection, input$SEdetection))
-        
-        
-        predout <- FPBKoutput(pred_info = predfit,
-          conf_level = c(0.80, 0.90, 0.95),
-          get_krigmap = TRUE, get_sampdetails = TRUE,
-          get_variogram = TRUE,
-          pointsize = 3)
-        
-    } else {
-      
+          
+          
+          predout <- FPBKoutput(pred_info = predfit,
+            conf_level = c(0.80, 0.90, 0.95),
+            get_krigmap = TRUE, get_sampdetails = TRUE,
+            get_variogram = TRUE,
+            pointsize = 3)
+          
+        } else {
+          
           multiobj <- multistrat(formula = formtouse,
             data = datare(),
             xcoordcol = input$xcoords,
@@ -377,14 +368,9 @@ server <- function(input, output, session) {
             detinfo = c(input$detection, input$SEdetection),
             areacol = areavar,
             stratcol = input$strat)
-    }
-    })}
+        }
+      })}
   })
-  
-  
-  
-  
-  
   
   
   
@@ -402,17 +388,16 @@ server <- function(input, output, session) {
   })
   
   output$summary <- renderPrint({
-      if (is.null(filedata()) == TRUE) {
+    if (is.null(filedata()) == TRUE) {
       print(modelfit())
-      } else {
-        print(modelfit2())
-      }
-    #  print(prednames)
+    } else {
+      print(modelfit2())
+    }
   })
   
   output$krigmap <- renderPlot({
     if (is.null(filedata()) == TRUE) {
-    modelfit()$krigmap
+      modelfit()$krigmap
     } else {
       modelfit2()$krigmap
     }
@@ -420,7 +405,7 @@ server <- function(input, output, session) {
   
   output$variogramplot <- renderPlot({
     if (is.null(filedata()) == TRUE) {
-    modelfit()$varplot
+      modelfit()$varplot
     } else {
       modelfit2()$varplot
     }
@@ -428,19 +413,17 @@ server <- function(input, output, session) {
   
   observeEvent(input$genreport, {
     if (is.null(filedata()) == TRUE) {
-    get_reportdoc(modelfit())
+      get_reportdoc(modelfit())
     } else {
       get_reportdoc(modelfit2())
     }
-   # session$sendCustomMessage(type = 'testmessage',
-  #    message = 'Thank you for clicking')
   })
   
   observeEvent(input$gendataframe, {
     dout <- "~/Desktop/"
     if (is.null(filedata()) == TRUE) {
-    write.csv(modelfit()$predvals, file = paste(dout,
-      "dataset.csv", sep = ""))
+      write.csv(modelfit()$predvals, file = paste(dout,
+        "dataset.csv", sep = ""))
     } else {
       write.csv(modelfit2()$predvals, file = paste(dout,
         "dataset.csv", sep = ""))
@@ -457,27 +440,19 @@ server <- function(input, output, session) {
     
     detectiondf <- read.csv(input$file2$datapath,
       header = input$headerdet,
-      sep = input$sepdet)#,
-    # quote = input$quote)
+      sep = input$sepdet)
     
     return(head(detectiondf))
-
   })
-  ## })
-  
+
   
   output$predcontents <- renderTable({
-    
-    # input$file2 will be NULL initially. After the user selects
-    # and uploads a file, head of that data file by default,
-    # or all rows if selected, will be shown.
     
     req(input$predfile)
     
     preddf <- read.csv(input$predfile$datapath,
       header = TRUE,
-      sep = ",")#,
-    # quote = input$quote)
+      sep = ",")
     
     return(head(preddf))
     
@@ -488,8 +463,7 @@ server <- function(input, output, session) {
     
     dfpred <- read.csv(input$predfile$datapath,
       header = TRUE,
-      sep = ",")#,
-    # quote = input$quote)
+      sep = ",")
     
     updateSelectInput(session, inputId = 'predid',
       label = 'ID in Prediction Data Set',
@@ -499,9 +473,6 @@ server <- function(input, output, session) {
       choices = names(dfpred))
     
     return(dfpred)
-    
-    ##lmobj <- lm(input$resp ~ 1, na.rm = TRUE, data = df)
-    ##print(summary(lmobj))
   })
   
    
@@ -511,6 +482,8 @@ server <- function(input, output, session) {
       
     # shpdf is a data.frame with the name, size, type and datapath of the uploaded files
     shpdf <- input$shp
+    library(rgdal)
+    library(viridis)
     
     # Name of the temporary directory where files are uploaded
     tempdirname <- dirname(shpdf$datapath[1])
@@ -520,21 +493,14 @@ server <- function(input, output, session) {
       file.rename(shpdf$datapath[i], paste0(tempdirname, "/",
         shpdf$name[i]))
     }
+    
     # Read shp
-    library(rgdal)
     map <- readOGR(paste(tempdirname,
       shpdf$name[grep(pattern = "*.shp$", shpdf$name)], sep="/"))
     
     updateSelectInput(session, inputId = 'shapeid',
       label = 'ID in Shapefile',
       choices = names(map))
-   # updateSelectInput(session, inputId = 'latcoords',
-  #    label = 'Latitude Coordinates',
-  #    choices = names(map))
-  #  updateSelectInput(session, inputId = 'loncoords',
-  #    label = 'Longitude Coordinates',
-  #    choices = names(map))
-    
     return(map)
   })
   
@@ -570,7 +536,6 @@ server <- function(input, output, session) {
     
     krigpredvec <- final.df2@data[ ,input$krigedpreds]
    
-   library(viridis)
    ggplot() +
       geom_polygon(data = final.df2@data,
         aes(x = testx123, y = testy123, group = id,
@@ -595,8 +560,7 @@ server <- function(input, output, session) {
     
     detectiondf <- read.csv(input$file2$datapath,
       header = input$headerdet,
-      sep = input$sepdet)#,
-    # quote = input$quote)
+      sep = input$sepdet)
     
     updateSelectInput(session, inputId = 'detectionresp',
       label = 'Detection Column',
@@ -611,45 +575,35 @@ server <- function(input, output, session) {
   
 modelfitradiocollar <- reactive({
     req(input$file2)
-   # req(input$file1)
-    
+
     dataradiocollar()
     if (input$godetection == 0) {
       return()
     } else {
-    #modradiocollar <- lm(input$detectionresp ~ 1)
-    isolate(if (sum(input$detectionpreds == "None") >= 1) {
       
-    detmod <- get_detection(formula =
-        as.formula(paste(input$detectionresp, "~", 1, sep = "")),
+    isolate({
+      
+      if (sum(input$detectionpreds == "None") >= 1) {
+        detectionform <- as.formula(paste(input$detectionresp, "~", 1, sep = ""))
+      } else {
+        detectionform <- as.formula(paste(input$detectionresp, "~",
+          paste(input$detectionpreds, collapse="+"), sep = ""))
+      }
+      
+    detmod <- get_detection(formula = detectionform,
       data = dataradiocollar(),
       varmethod = "Bootstrap")
     
     return(detmod)
-    
-    } else {
-      detectionform <- as.formula(paste(input$detectionresp, "~",
-        paste(input$detectionpreds, collapse="+"), sep = ""))
       
-      detmod <- get_detection(formula =
-          detectionform,
-        data = dataradiocollar(),
-        varmethod = "Bootstrap")
-      
-      return(detmod)
-    }
-    )}
+    })}
   })
 
 output$radiosummary <- renderPrint({
-  
   print(modelfitradiocollar())
-  #  print(prednames)
 })
   
-
 }
 
-# Run the application 
 shinyApp(ui = ui, server = server)
 
