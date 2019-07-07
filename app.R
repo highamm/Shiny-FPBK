@@ -1,17 +1,13 @@
 library(shiny)
 library(shinyjs)
+library(shinyFiles)
 library(ggplot2)
 ##library(devtools)
 ##devtools::install_git("https://github.com/highamm/FPBKPack2.git")
 library(FPBKPack2)
-
+##
 ## library(rsconnect)
 ## rsconnect::deployApp('~/Desktop/FPBKShiny/FPBKShinyApp')
-
-## next steps:
-## 1.) Test the shiny app using moose data
-## 2.) Change automatic updating to a submit button
-
 
 #detectionvar <- rbinom(40, 1, 0.6)
 #predictor1 <- runif(40, 0, 1)
@@ -34,7 +30,7 @@ ui <- fluidPage(
       sidebarPanel(
         conditionalPanel(condition = "input.tabs1==1",
         fileInput("file1", "Choose CSV File with Count Data",
-          multiple = TRUE,
+          multiple = FALSE,
           accept = c("text/csv",
             "text/comma-separated-values,text/plain",
             ".csv")),
@@ -51,21 +47,10 @@ ui <- fluidPage(
             Tab = "\t"),
           selected = ","),
         
-        # Input: Select quotes ----
-    #    radioButtons("quote", "Quote",
-    #      choices = c(None = "",
-    #        "Double Quote" = '"',
-    #        "Single Quote" = "'"),
-    #      selected = '"'),
-        
+
         # Horizontal line ----
     #    tags$hr(),
         
-        # Input: Select number of rows to display ----
-     #   radioButtons("disp", "Display",
-    #      choices = c(Head = "head",
-    #        All = "all"),
-    #      selected = "head"),
         
         selectInput('resp', 'Select Response:', ""),
         checkboxGroupInput('preds', 'Select Predictors:', ""),
@@ -80,9 +65,11 @@ ui <- fluidPage(
           'Enter Standard Error for Detection:', value = 0,
           min = 0, max = Inf),
         radioButtons("latlon", "Latitude / Longitude?",
-          choices = c(Yes = "Yes",
-            No = "No"),
-          selected = "2"),
+          choices = c(Yes = "LatLon",
+            No = "TM"),
+          selected = "TM"),
+        selectInput('predwtscol',
+          'Select Column with Prediction Weights', ""),
         actionButton("go", "Submit"),
           
         
@@ -95,7 +82,7 @@ ui <- fluidPage(
         
         conditionalPanel(condition = "input.tabs1==3",
         fileInput("file2", "Choose CSV File with Radiocollar Data",
-          multiple = TRUE,
+          multiple = FALSE,
           accept = c("text/csv",
             "text/comma-separated-values,text/plain",
             ".csv")),
@@ -116,6 +103,28 @@ ui <- fluidPage(
           
           
           
+          ),
+        
+        conditionalPanel(condition = "input.tabs1==4",
+          fileInput(inputId = "shp", label = "Choose Shapefile", multiple = TRUE, accept = c('.shp', '.dbf','.sbn', '.sbx', '.shx', '.prj')),
+          fileInput("predfile",
+            "Choose File with Site by Site Predictions",
+            multiple = FALSE,
+            accept = c("text/csv",
+              "text/comma-separated-values,text/plain",
+              ".csv")),
+          
+          selectInput('shapeid',
+            'Select Shape ID Column:', ""),
+          selectInput('predid',
+            'Select Prediction ID Column:', ""),
+          selectInput('krigedpreds',
+            'Select Column with Sitewise Predictions', ""),
+    #      selectInput('latcoords',
+    #        'Select Column with Latitude Coordinates', ""),
+    #      selectInput('loncoords',
+    #        'Select Column with Longitude Coordinates', ""),
+          actionButton("goshapefile", "Submit")
           )
       
         # Input: Select number of rows to display ----
@@ -148,7 +157,11 @@ ui <- fluidPage(
            "Stratum can be included as a predictor in the spatial model by choosing the column with stratum in the Select Predictors part of the app. Doing so fits a a single spatial linear model, assuming that all sites have the same spatial structure with different means. Alternatively, stratum can be unchecked as a predictor but chosen in the Select Stratification option. Doing so fits a model for each stratum, allowing strata to have different covariance structures. The assumption we make with this model is that the strata are not cross-correlated. For more information about each of these options, see the accompanying Vignette."),
          tabPanel("Radiocollar Sightability", value = 3,
            tableOutput("radiocontents"),
-           verbatimTextOutput("radiosummary"))
+           verbatimTextOutput("radiosummary")),
+         
+         tabPanel("Map with Shapefile", value = 4,
+           tableOutput("predcontents"),
+           plotOutput("shapecontents"))
          )
      )
    )
@@ -206,54 +219,19 @@ server <- function(input, output, session) {
     updateSelectInput(session, inputId = 'area',
       label = 'Area column',
       choices = c("None", names(df)), selected = "None")
+    updateSelectInput(session, inputId = 'predwtscol',
+      label = 'Prediction Weight Column',
+      choices = c("None", names(df)), selected = "None")
     
     return(df)
     
     ##lmobj <- lm(input$resp ~ 1, na.rm = TRUE, data = df)
     ##print(summary(lmobj))
   })
-  
-  df_test = reactive({
-    df_new = datare()
-    if(input$latlon == "Yes") {
-      df_new$xcoordcol22 <- LLtoUTM(cm = base::mean(datare()[ ,input$xcoords]),
-        lat = datare()[ ,input$ycoords],
-        lon = datare()[ ,input$xcoords])$xy[ ,1]
-      
-      
-    } else if (input$latlon == "No") {
-      df_new$xcoordcol22 <- datare()$input$xcoords
-    }
-    df_new
-  })
-  
- # lmod <- reactive({ 
-#    mod1 <- lm(input$resp ~ 1, data = values$df)
-#  })
- # test <- c("fdafs", "dfaf")
-#  test == "faaf"
-  
- # testdf <- data.frame(x = c(1, 2), y = c(2, 3))
-#  testdf[ ,"x"]
-#  prednames <- list("x", "y")
-#  testdf[ ,unlist(prednames)]
 
- # testsomething <- reactive({
-#    req(input$file1)
-    #radiocollardataout <- modelfitradiocollar()
-#    datare()
-    
-#    sum(input$strat == "None")
-#  })
-  
-#  output$testoutput <- renderTable({
-#    print(testsomething())
-#  })
-  
 
   modelfit <- reactive({
     req(input$file1)
-    #radiocollardataout <- modelfitradiocollar()
 
    datare()
    
@@ -263,129 +241,52 @@ server <- function(input, output, session) {
      
      ## isolate wraps this so that it doesn't automatically
      ## update after submit is hit for the first time
-    isolate(if (sum(input$strat == "None") >= 1) {
-      
-      formtouse <- as.formula(paste(input$resp, "~",
-        paste(input$preds, collapse="+"), sep = ""))
+    isolate({
       
       if (sum(input$preds == "None") >= 1) {
-        # fit <- lm(datare()[ ,input$resp] ~ 1)
-        
-        if (sum(input$area == "None") >= 1) {
-          fit <- slmfit(formula = as.formula(paste(input$resp, "~",
-            1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = NULL,
-            areacol = NULL)
-          
-        } else {
-          fit <- slmfit(formula = as.formula(paste(input$resp, "~",
-            1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = NULL,
-            areacol = input$area)
-        }
-        
-        predfit <- predict(fit, FPBKcol = NULL,
-          detinfo = c(input$detection, input$SEdetection))
-        
-        predout <- FPBKoutput(pred_info = predfit,
-          conf_level = c(0.80, 0.90, 0.95),
-          get_krigmap = TRUE, get_sampdetails = TRUE,
-          get_variogram = TRUE,
-          nbreaks = 4,
-          breakMethod = 'quantile', 
-          pointsize = 3)
-        
-        
+        formtouse <- as.formula(paste(input$resp, "~",
+          1, sep = ""))
       } else {
+        formtouse <- as.formula(paste(input$resp, "~",
+          paste(input$preds, collapse="+"), sep = ""))
+      }
+      
+      if (sum(input$area == "None") >= 1) {
+        areavar <- NULL 
+      } else {
+        areavar <- input$area
+      }
+      
+      if (sum(input$predwtscol == "None") >= 1) {
+        FPBKvar <- NULL
+      } else {
+        FPBKvar <- input$predwtscol
+      }
+      
+      if (sum(input$strat == "None") >= 1) {
         
-        #   fit <- lm(as.formula(paste(input$resp, "~",
-        #      paste(input$preds, collapse="+"), sep = "")), data = datare())
-        
-        if (sum(input$area == "None") >= 1) {
           fit <- slmfit(formula = formtouse,
             data = datare(),
             xcoordcol = input$xcoords,
             ycoordcol = input$ycoords,
             CorModel = "Exponential",
             estmethod = "REML",
+            coordtype = input$latlon,
             covestimates = c(NA, NA, NA),
             detectionobj = NULL,
-            areacol = NULL)
-        } else {
-          fit <- slmfit(formula = formtouse,
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = NULL,
-            areacol = input$area)
-        }
+            areacol = areavar)
         
-        predfit <- predict(fit, FPBKcol = NULL,
-          detinfo = c(input$detection, input$SEdetection))
+          predfit <- predict(fit, FPBKcol = FPBKvar,
+            detinfo = c(input$detection, input$SEdetection))
         
         predout <- FPBKoutput(pred_info = predfit,
           conf_level = c(0.80, 0.90, 0.95),
           get_krigmap = TRUE, get_sampdetails = TRUE,
           get_variogram = TRUE,
-          nbreaks = 4,
-          breakMethod = 'quantile', 
           pointsize = 3)
-      }
+    
     } else {
       
-      formtouse <- as.formula(paste(input$resp, "~",
-        paste(input$preds, collapse="+"), sep = ""))
-      
-      if (sum(input$preds == "None") >= 1) {
-        
-        if (sum(input$area == "None") >= 1) {
-          multiobj <- multistrat(formula = as.formula(paste(input$resp, "~",
-            1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = NULL,
-            detinfo = c(input$detection, input$SEdetection),
-            areacol = NULL,
-            stratcol = input$strat)
-        } else {
-          multiobj <- multistrat(formula =
-              as.formula(paste(input$resp, "~",
-                1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = NULL,
-            detinfo = c(input$detection, input$SEdetection),
-            areacol = input$area,
-            stratcol = input$strat)
-        }
-        
-      } else {
-        
-        if (sum(input$area == "None") >= 1) {
-          
           multiobj <- multistrat(formula = formtouse,
             data = datare(),
             xcoordcol = input$xcoords,
@@ -393,170 +294,77 @@ server <- function(input, output, session) {
             CorModel = "Exponential",
             estmethod = "REML",
             covestimates = c(NA, NA, NA),
+            coordtype = input$latlon,
             detectionobj = NULL,
             detinfo = c(input$detection, input$SEdetection),
-            areacol = NULL,
+            areacol = areavar,
             stratcol = input$strat)
-        } else {
-          multiobj <- multistrat(formula = formtouse,
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = NULL,
-            detinfo = c(input$detection, input$SEdetection),
-            areacol = input$area,
-            stratcol = input$strat)
-        }
-      }
-    })
+    }
+      })
    }
   })
 
   
   
   
-  
-  
-  
-  
-  
   modelfit2 <- reactive({
     req(input$file1)
     req(input$file2)
-    #radiocollardataout <- modelfitradiocollar()
-    
+
     datare()
     
     if (input$godetection == 0 | input$go == 0) {
       return()
     } else {
  
-    isolate(if (sum(input$strat == "None") >= 1) {
-      
-      formtouse <- as.formula(paste(input$resp, "~",
-        paste(input$preds, collapse="+"), sep = ""))
+    isolate({
       
       if (sum(input$preds == "None") >= 1) {
-        # fit <- lm(datare()[ ,input$resp] ~ 1)
-        
-        if (sum(input$area == "None") >= 1) {
-          fit <- slmfit(formula = as.formula(paste(input$resp, "~",
-            1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = modelfitradiocollar(),
-            areacol = NULL)
-          
-        } else {
-          fit <- slmfit(formula = as.formula(paste(input$resp, "~",
-            1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = modelfitradiocollar(),
-            areacol = input$area)
-        }
-        
-        predfit <- predict(fit, FPBKcol = NULL,
-          detinfo = c(input$detection, input$SEdetection))
-        
-        predout <- FPBKoutput(pred_info = predfit,
-          conf_level = c(0.80, 0.90, 0.95),
-          get_krigmap = TRUE, get_sampdetails = TRUE,
-          get_variogram = TRUE,
-          nbreaks = 4,
-          breakMethod = 'quantile', 
-          pointsize = 3)
-        
-        
+        formtouse <- as.formula(paste(input$resp, "~",
+          1, sep = "")) 
       } else {
-        
-        #   fit <- lm(as.formula(paste(input$resp, "~",
-        #      paste(input$preds, collapse="+"), sep = "")), data = datare())
-        
-        if (sum(input$area == "None") >= 1) {
+        formtouse <- as.formula(paste(input$resp, "~",
+          paste(input$preds, collapse="+"), sep = ""))
+      }
+      
+      if (sum(input$area == "None") >= 1) {
+        areavar <- NULL
+      } else {
+        areavar <- input$area
+      }
+      
+      if (sum(input$predwtscol == "None") >= 1) {
+        FPBKvar <- NULL
+      } else {
+        FPBKvar <- input$predwtscol
+      }
+      
+      if (sum(input$strat == "None") >= 1) {
+      
           fit <- slmfit(formula = formtouse,
             data = datare(),
             xcoordcol = input$xcoords,
             ycoordcol = input$ycoords,
             CorModel = "Exponential",
             estmethod = "REML",
+            coordtype = input$latlon,
             covestimates = c(NA, NA, NA),
             detectionobj = modelfitradiocollar(),
-            areacol = NULL)
-        } else {
-          fit <- slmfit(formula = formtouse,
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = modelfitradiocollar(),
-            areacol = input$area)
-        }
+            areacol = areavar)
+          
         
-        predfit <- predict(fit, FPBKcol = NULL,
-          detinfo = c(input$detection, input$SEdetection))
+          predfit <- predict(fit, FPBKcol = FPBKvar,
+            detinfo = c(input$detection, input$SEdetection))
+        
         
         predout <- FPBKoutput(pred_info = predfit,
           conf_level = c(0.80, 0.90, 0.95),
           get_krigmap = TRUE, get_sampdetails = TRUE,
           get_variogram = TRUE,
-          nbreaks = 4,
-          breakMethod = 'quantile', 
           pointsize = 3)
-      }
+        
     } else {
       
-      formtouse <- as.formula(paste(input$resp, "~",
-        paste(input$preds, collapse="+"), sep = ""))
-      
-      if (sum(input$preds == "None") >= 1) {
-        
-        if (sum(input$area == "None") >= 1) {
-          multiobj <- multistrat(formula = as.formula(paste(input$resp, "~",
-            1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = modelfitradiocollar(),
-            detinfo = c(input$detection, input$SEdetection),
-            areacol = NULL,
-            stratcol = input$strat)
-        } else {
-          multiobj <- multistrat(formula =
-              as.formula(paste(input$resp, "~",
-                1, sep = "")),
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = modelfitradiocollar(),
-            detinfo = c(input$detection, input$SEdetection),
-            areacol = input$area,
-            stratcol = input$strat)
-        }
-        
-      } else {
-        
-        if (sum(input$area == "None") >= 1) {
-          
           multiobj <- multistrat(formula = formtouse,
             data = datare(),
             xcoordcol = input$xcoords,
@@ -564,26 +372,13 @@ server <- function(input, output, session) {
             CorModel = "Exponential",
             estmethod = "REML",
             covestimates = c(NA, NA, NA),
+            coordtype = input$latlon,
             detectionobj = modelfitradiocollar(),
             detinfo = c(input$detection, input$SEdetection),
-            areacol = NULL,
+            areacol = areavar,
             stratcol = input$strat)
-        } else {
-          multiobj <- multistrat(formula = formtouse,
-            data = datare(),
-            xcoordcol = input$xcoords,
-            ycoordcol = input$ycoords,
-            CorModel = "Exponential",
-            estmethod = "REML",
-            covestimates = c(NA, NA, NA),
-            detectionobj = modelfitradiocollar(),
-            detinfo = c(input$detection, input$SEdetection),
-            areacol = input$area,
-            stratcol = input$strat)
-        }
-      }
     }
-    )}
+    })}
   })
   
   
@@ -654,7 +449,7 @@ server <- function(input, output, session) {
 
   output$radiocontents <- renderTable({
     
-    # input$file1 will be NULL initially. After the user selects
+    # input$file2 will be NULL initially. After the user selects
     # and uploads a file, head of that data file by default,
     # or all rows if selected, will be shown.
     
@@ -669,6 +464,130 @@ server <- function(input, output, session) {
 
   })
   ## })
+  
+  
+  output$predcontents <- renderTable({
+    
+    # input$file2 will be NULL initially. After the user selects
+    # and uploads a file, head of that data file by default,
+    # or all rows if selected, will be shown.
+    
+    req(input$predfile)
+    
+    preddf <- read.csv(input$predfile$datapath,
+      header = TRUE,
+      sep = ",")#,
+    # quote = input$quote)
+    
+    return(head(preddf))
+    
+  })
+  
+  predre <- reactive({
+    req(input$predfile)
+    
+    dfpred <- read.csv(input$predfile$datapath,
+      header = TRUE,
+      sep = ",")#,
+    # quote = input$quote)
+    
+    updateSelectInput(session, inputId = 'predid',
+      label = 'ID in Prediction Data Set',
+      choices = names(dfpred))
+    updateSelectInput(session, inputId = 'krigedpreds',
+      label = "Predictions",
+      choices = names(dfpred))
+    
+    return(dfpred)
+    
+    ##lmobj <- lm(input$resp ~ 1, na.rm = TRUE, data = df)
+    ##print(summary(lmobj))
+  })
+  
+   
+  shapereact <- reactive({
+    
+    req(input$shp)
+      
+    # shpdf is a data.frame with the name, size, type and datapath of the uploaded files
+    shpdf <- input$shp
+    
+    # Name of the temporary directory where files are uploaded
+    tempdirname <- dirname(shpdf$datapath[1])
+    
+    # Rename files
+    for(i in 1:nrow(shpdf)){
+      file.rename(shpdf$datapath[i], paste0(tempdirname, "/",
+        shpdf$name[i]))
+    }
+    # Read shp
+    library(rgdal)
+    map <- readOGR(paste(tempdirname,
+      shpdf$name[grep(pattern = "*.shp$", shpdf$name)], sep="/"))
+    
+    updateSelectInput(session, inputId = 'shapeid',
+      label = 'ID in Shapefile',
+      choices = names(map))
+   # updateSelectInput(session, inputId = 'latcoords',
+  #    label = 'Latitude Coordinates',
+  #    choices = names(map))
+  #  updateSelectInput(session, inputId = 'loncoords',
+  #    label = 'Longitude Coordinates',
+  #    choices = names(map))
+    
+    return(map)
+  })
+  
+  output$shapecontents <- renderPlot({
+    
+    predre()
+    shapereact()
+    
+    if (input$goshapefile == 0) {
+      return()
+    } else {
+      
+    shapefort <- fortify(shapereact(), region = input$shapeid)
+    
+    coorddf <- SpatialPointsDataFrame(data = shapefort,
+      coords = cbind(shapefort$long,
+        shapefort$lat))
+    proj4string(coorddf) <- proj4string(shapereact())
+    
+    trans.df <- spTransform(coorddf,
+      CRS("+proj=longlat +datum=WGS84"))
+    
+    predictiondf <- predre()
+    
+    final.df <- merge(trans.df, predictiondf,
+      by.x = "id", by.y = input$predid,
+      all.x = TRUE, sort = TRUE)
+    
+    final.df2 <- final.df[order(final.df$order), ]
+
+    final.df2@data$testx123 <- final.df2@coords[ ,1]
+    final.df2@data$testy123 <- final.df2@coords[ ,2]
+    
+    krigpredvec <- final.df2@data[ ,input$krigedpreds]
+   
+   library(viridis)
+   ggplot() +
+      geom_polygon(data = final.df2@data,
+        aes(x = testx123, y = testy123, group = id,
+          fill = krigpredvec),
+        colour = "darkgrey", alpha = 1) +
+      theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+      scale_fill_viridis(discrete = FALSE,
+        "Predictions") + ##, direction = -1,
+      ##   labels = c("High", "Low", "NA"),
+      ##  "Stratum") +
+      xlab("Longitude") + ylab("Latitude") +
+      ggtitle("Map of Site-wise Predictions") +
+     ggsave("Krigmap.png") ## saves in working directory by default
+    }
+  })
+
   
   dataradiocollar <- reactive({
     
@@ -686,20 +605,9 @@ server <- function(input, output, session) {
     updateCheckboxGroupInput(session, inputId = 'detectionpreds',
       label = "Detection Predictors",
       choices = c("None", names(detectiondf)), selected = "None")
-  #  updateSelectInput(session, inputId = 'xcoords',
-  #    label = 'X-coordinate column',
-  #    choices = names(df))
-  #  updateSelectInput(session, inputId = 'ycoords',
-  #    label = 'Y-coordinate column',
-  #    choices = names(df))
-  #  updateSelectInput(session, inputId = 'strat',
-  #    label = 'Stratification column',
-  #    choices = c("None", names(df)), selected = "None")
     
     return(detectiondf)
-    ##lmobj <- lm(input$resp ~ 1, na.rm = TRUE, data = df)
-    ##print(summary(lmobj))
-  })
+})
   
 modelfitradiocollar <- reactive({
     req(input$file2)
@@ -715,10 +623,9 @@ modelfitradiocollar <- reactive({
     detmod <- get_detection(formula =
         as.formula(paste(input$detectionresp, "~", 1, sep = "")),
       data = dataradiocollar(),
-      varmethod = "Delta")
+      varmethod = "Bootstrap")
     
-   # valuesdet <- reactiveValues()
-  #  valuesdet$a <- detmod
+    return(detmod)
     
     } else {
       detectionform <- as.formula(paste(input$detectionresp, "~",
@@ -727,7 +634,7 @@ modelfitradiocollar <- reactive({
       detmod <- get_detection(formula =
           detectionform,
         data = dataradiocollar(),
-        varmethod = "Delta")
+        varmethod = "Bootstrap")
       
       return(detmod)
     }
