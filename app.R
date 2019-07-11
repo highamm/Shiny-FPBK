@@ -3,7 +3,7 @@ library(shinyjs)
 library(shinyFiles)
 library(ggplot2)
 ##library(devtools)
-##devtools::install_git("https://github.com/highamm/FPBKPack2.git")
+## devtools::install_git("https://github.com/highamm/FPBKPack2.git")
 library(FPBKPack2)
 ##
 ## library(rsconnect)
@@ -420,7 +420,7 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$gendataframe, {
-    dout <- "~/Desktop/"
+    dout <- input$file1$datapath
     if (is.null(filedata()) == TRUE) {
       write.csv(modelfit()$predvals, file = paste(dout,
         "dataset.csv", sep = ""))
