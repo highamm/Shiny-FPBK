@@ -554,12 +554,13 @@ server <- function(input, output, session) {
         colour = "darkgrey", alpha = 1) +
       theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank()) +
-      scale_fill_viridis(discrete = FALSE,
+      viridis::scale_fill_viridis(discrete = FALSE,
         "Predictions") + ##, direction = -1,
       ##   labels = c("High", "Low", "NA"),
       ##  "Stratum") +
       xlab("Longitude") + ylab("Latitude") +
       ggtitle("Map of Site-wise Predictions") +
+     coord_quickmap() +
      ggsave("Krigmap.png") ## saves in working directory by default
     }
   })
