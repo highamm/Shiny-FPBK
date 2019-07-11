@@ -36,14 +36,14 @@ ui <- fluidPage(
             ".csv")),
         
         # Horizontal line ----
-        tags$hr(),
+      #  tags$hr(),
         
         # Input: Checkbox if file has header ----
-        checkboxInput("header", "Header", TRUE),
+      #  checkboxInput("header", "Header", TRUE),
         # Input: Select separator ----
         radioButtons("sep", "Separator",
           choices = c(Comma = ",",
-            Semicolon = ";",
+            #Semicolon = ";",
             Tab = "\t"),
           selected = ","),
         
@@ -52,24 +52,34 @@ ui <- fluidPage(
     #    tags$hr(),
         
         
-        selectInput('resp', 'Select Response:', ""),
-        checkboxGroupInput('preds', 'Select Predictors:', ""),
-        selectInput('xcoords', 'Select X-coords:', ""),
-        selectInput('ycoords', 'Select Y-coords:', ""),
-        selectInput('strat', 'Select Stratification:', ""),
-        selectInput('area', 'Select Area Column:', ""),
+        selectInput('resp', 'Select Response:', "",
+          width = '200px'),
+        checkboxGroupInput('preds', 'Select Predictors:', "",
+          width = '200px'),
+        selectInput('xcoords', 'Select X-coords:', "",
+          width = '200px'),
+        selectInput('ycoords', 'Select Y-coords:', "",
+          width = '200px'),
+        selectInput('strat', 'Select Stratification:', "",
+          width = '200px'),
+        selectInput('area', 'Select Area Column:', "",
+          width = '200px'),
         numericInput('detection',
           'Enter Estimated Detection:', value = 1,
-          min = 0, max = 1),
+          min = 0, max = 1,
+          width = '200px'),
         numericInput('SEdetection',
           'Enter Standard Error for Detection:', value = 0,
-          min = 0, max = Inf),
+          min = 0, max = Inf,
+          width = '200px'),
         radioButtons("latlon", "Latitude / Longitude?",
           choices = c(Yes = "LatLon",
             No = "TM"),
-          selected = "TM"),
+          selected = "TM",
+          width = '200px'),
         selectInput('predwtscol',
-          'Select Column with Prediction Weights', ""),
+          'Select Column with Prediction Weights', "",
+          width = '200px'),
         actionButton("go", "Submit"),
           
         
@@ -86,12 +96,12 @@ ui <- fluidPage(
           accept = c("text/csv",
             "text/comma-separated-values,text/plain",
             ".csv")),
-        checkboxInput("headerdet", "Header", TRUE),
+       ## checkboxInput("headerdet", "Header", TRUE),
         
         # Input: Select separator ----
         radioButtons("sepdet", "Separator",
           choices = c(Comma = ",",
-            Semicolon = ";",
+         ##   Semicolon = ";",
             Tab = "\t"),
           selected = ","),
           
@@ -178,7 +188,7 @@ server <- function(input, output, session) {
     req(input$file1)
     
     df <- read.csv(input$file1$datapath,
-      header = input$header,
+      header = TRUE,
       sep = input$sep)#,
      # quote = input$quote)
     
@@ -190,7 +200,7 @@ server <- function(input, output, session) {
     req(input$file1)
     
     df <- read.csv(input$file1$datapath,
-      header = input$header,
+      header = TRUE,
       sep = input$sep)#,
      # quote = input$quote)
     
@@ -440,7 +450,7 @@ server <- function(input, output, session) {
     req(input$file2)
     
     detectiondf <- read.csv(input$file2$datapath,
-      header = input$headerdet,
+      header = TRUE,
       sep = input$sepdet)
     
     return(head(detectiondf))
@@ -560,7 +570,7 @@ server <- function(input, output, session) {
     req(input$file2)
     
     detectiondf <- read.csv(input$file2$datapath,
-      header = input$headerdet,
+      header = TRUE,
       sep = input$sepdet)
     
     updateSelectInput(session, inputId = 'detectionresp',
