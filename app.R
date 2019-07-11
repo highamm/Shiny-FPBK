@@ -420,13 +420,14 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$gendataframe, {
+    ##dout <- "~/Desktop/"
     dout <- input$file1$datapath
     if (is.null(filedata()) == TRUE) {
-      write.csv(modelfit()$predvals, file = paste(dout,
-        "dataset.csv", sep = ""))
+      write.csv(modelfit()$predvals, file = "datatest.csv")#file = paste(dout,
+       # "dataset.csv", sep = ""))
     } else {
-      write.csv(modelfit2()$predvals, file = paste(dout,
-        "dataset.csv", sep = ""))
+      write.csv(modelfit2()$predvals, file = "datatest.csv")#file = paste(dout,
+        #"dataset.csv", sep = ""))
     }
   })
 
