@@ -1,7 +1,7 @@
 library(shiny)
-library(shinyjs)
+## library(shinyjs)
 library(shinyFiles)
-library(ggplot2)
+##library(ggplot2)
 ##library(devtools)
 ## devtools::install_git("https://github.com/highamm/FPBKPack2.git")
 library(FPBKPack2)
@@ -433,10 +433,11 @@ server <- function(input, output, session) {
     ##dout <- "~/Desktop/"
     dout <- input$file1$datapath
     if (is.null(filedata()) == TRUE) {
-      write.csv(modelfit()$predvals, file = "datatest.csv")#file = paste(dout,
+      write.csv(modelfit()$predvals, file = "predictions.csv")#file = paste(dout,
        # "dataset.csv", sep = ""))
     } else {
-      write.csv(modelfit2()$predvals, file = "datatest.csv")#file = paste(dout,
+      write.csv(modelfit2()$predvals, file = "predictions.csv")
+      #file = paste(dout,
         #"dataset.csv", sep = ""))
     }
   })
