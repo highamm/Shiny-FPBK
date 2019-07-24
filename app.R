@@ -507,7 +507,7 @@ server <- function(input, output, session) {
     }
     
     # Read shp
-    map <- readOGR(paste(tempdirname,
+    map <- rgdal::readOGR(paste(tempdirname,
       shpdf$name[grep(pattern = "*.shp$", shpdf$name)], sep="/"))
     
     updateSelectInput(session, inputId = 'shapeid',
@@ -531,10 +531,10 @@ server <- function(input, output, session) {
     coorddf <- sp::SpatialPointsDataFrame(data = shapefort,
       coords = cbind(shapefort$long,
         shapefort$lat))
-    proj4string(coorddf) <- sp::proj4string(shapereact())
+    sp::proj4string(coorddf) <- sp::proj4string(shapereact())
     
     trans.df <- rgdal::spTransform(coorddf,
-      CRS("+proj=longlat +datum=WGS84"))
+      rgdal::CRS("+proj=longlat +datum=WGS84"))
     
     predictiondf <- predre()
     
