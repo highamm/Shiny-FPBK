@@ -496,8 +496,8 @@ server <- function(input, output, session) {
     shpdf <- input$shp
     library(rgdal)
     library(sp)
-    library(maptools)
-    library(rgeos)
+    library(broom)
+ 
 
     # Name of the temporary directory where files are uploaded
     tempdirname <- dirname(shpdf$datapath[1])
@@ -527,7 +527,7 @@ server <- function(input, output, session) {
       return()
     } else {
       
-    shapefort <- ggplot2::fortify(shapereact(),
+    shapefort <- broom::tidy.SpatialPolygonsDataFrame(shapereact(),
       region = input$shapeid)
     
     coorddf <- sp::SpatialPointsDataFrame(data = shapefort,
