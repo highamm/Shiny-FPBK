@@ -497,6 +497,7 @@ server <- function(input, output, session) {
     library(rgdal)
     library(sp)
     library(rgeos)
+    library(maptools)
     library(broom)
  
 
