@@ -496,6 +496,8 @@ server <- function(input, output, session) {
     shpdf <- input$shp
     library(rgdal)
     library(sp)
+    library(maptools)
+    library(rgeos)
 
     # Name of the temporary directory where files are uploaded
     tempdirname <- dirname(shpdf$datapath[1])
