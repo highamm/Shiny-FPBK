@@ -496,6 +496,7 @@ server <- function(input, output, session) {
     shpdf <- input$shp
     library(rgdal)
     library(sp)
+    library(rgeos)
     library(broom)
  
 
