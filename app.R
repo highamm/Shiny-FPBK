@@ -527,7 +527,7 @@ server <- function(input, output, session) {
       return()
     } else {
       
-    shapefort <- broom::tidy.SpatialPolygonsDataFrame(shapereact(),
+    shapefort <- broom::tidy(shapereact(),
       region = input$shapeid)
     
     coorddf <- sp::SpatialPointsDataFrame(data = shapefort,
@@ -535,14 +535,14 @@ server <- function(input, output, session) {
         shapefort$lat))
     sp::proj4string(coorddf) <- sp::proj4string(shapereact())
     
-    trans.df <- rgdal::spTransform(coorddf,
-      rgdal::CRS("+proj=longlat +datum=WGS84"))
+    trans.df <- sp::spTransform(coorddf,
+      sp::CRS("+proj=longlat +datum=WGS84"))
     
     predictiondf <- predre()
     
-    final.df <- merge(trans.df, predictiondf,
+    final.df <- suppressWarnings(merge(trans.df, predictiondf,
       by.x = "id", by.y = input$predid,
-      all.x = TRUE, sort = TRUE)
+      all.x = TRUE, sort = TRUE))
     
     final.df2 <- final.df[order(final.df$order), ]
 
