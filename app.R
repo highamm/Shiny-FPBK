@@ -164,7 +164,7 @@ ui <- fluidPage(
              tags$li("Click the Get Report button for an HTML report that can be saved as a PDF or the Get Prediction Data button for the data set in a that was originally uploaded with site-by-site predictions and a few other columns of information appended in a .csv format.")
            ),
            h3("Information about Stratification"),
-           "Stratum can be included as a predictor in the spatial model by choosing the column with stratum in the Select Predictors part of the app. Doing so fits a a single spatial linear model, assuming that all sites have the same spatial structure with different means. Alternatively, stratum can be unchecked as a predictor but chosen in the Select Stratification option. Doing so fits a model for each stratum, allowing strata to have different covariance structures. The assumption we make with this model is that the strata are not cross-correlated. For more information about each of these options, see the accompanying Vignette."),
+           "Stratum can be included as a predictor in the spatial model by choosing the column with stratum in the Select Predictors part of the app. Doing so fits a a single spatial linear model, assuming that all sites have the same spatial structure with different means. Alternatively, stratum can be unchecked as a predictor but chosen in the Select Stratification option. Doing so fits a model for each stratum, allowing strata to have different covariance structures. The assumption we make with this model is that the strata are not cross-correlated."),
          tabPanel("Radiocollar Sightability", value = 3,
            tableOutput("radiocontents"),
            verbatimTextOutput("radiosummary")),
@@ -495,8 +495,8 @@ server <- function(input, output, session) {
     # shpdf is a data.frame with the name, size, type and datapath of the uploaded files
     shpdf <- input$shp
     library(rgdal)
-    library(viridis)
-    
+    library(sp)
+
     # Name of the temporary directory where files are uploaded
     tempdirname <- dirname(shpdf$datapath[1])
     
@@ -525,14 +525,15 @@ server <- function(input, output, session) {
       return()
     } else {
       
-    shapefort <- fortify(shapereact(), region = input$shapeid)
+    shapefort <- ggplot2::fortify(shapereact(),
+      region = input$shapeid)
     
-    coorddf <- SpatialPointsDataFrame(data = shapefort,
+    coorddf <- sp::SpatialPointsDataFrame(data = shapefort,
       coords = cbind(shapefort$long,
         shapefort$lat))
-    proj4string(coorddf) <- proj4string(shapereact())
+    proj4string(coorddf) <- sp::proj4string(shapereact())
     
-    trans.df <- spTransform(coorddf,
+    trans.df <- rgdal::spTransform(coorddf,
       CRS("+proj=longlat +datum=WGS84"))
     
     predictiondf <- predre()
@@ -548,21 +549,20 @@ server <- function(input, output, session) {
     
     krigpredvec <- final.df2@data[ ,input$krigedpreds]
    
-   ggplot() +
-      geom_polygon(data = final.df2@data,
-        aes(x = testx123, y = testy123, group = id,
+   ggplot2::ggplot() +
+      ggplot2::geom_polygon(data = final.df2@data,
+        ggplot2::aes(x = testx123, y = testy123, group = id,
           fill = krigpredvec),
         colour = "darkgrey", alpha = 1) +
-      theme(panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()) +
-      viridis::scale_fill_viridis(discrete = FALSE,
-        "Predictions") + ##, direction = -1,
+      ggplot2::theme(panel.grid.major = ggplot2::element_blank(),
+        panel.grid.minor = ggplot2::element_blank()) +
+      ggplot2::scale_fill_viridis_c("Predictions") + ##, direction = -1,
       ##   labels = c("High", "Low", "NA"),
       ##  "Stratum") +
-      xlab("Longitude") + ylab("Latitude") +
-      ggtitle("Map of Site-wise Predictions") +
-     coord_quickmap() +
-     ggsave("Krigmap.png") ## saves in working directory by default
+      ggplot2::xlab("Longitude") + ggplot2::ylab("Latitude") +
+      ggplot2::ggtitle("Map of Site-wise Predictions") +
+     ggplot2::coord_quickmap() +
+     ggplot2::ggsave("Krigmap.png") ## saves in working directory by default
     }
   })
 

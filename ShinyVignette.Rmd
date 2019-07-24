@@ -36,7 +36,7 @@ If using the app for the first time, we recommend making sure that the steps in 
 
 As mentioned above, we will use an example data set to illustrate how to use the `Shiny` app. If desired, one can download the example data set from INSERT URL HERE and follow along. Though we have sightability trials for this particular data set, suppose first that we want to assume perfect detection. Like many moose data sets, the the sites in our example data set are stratified into a "High" stratum and a "Low" stratum. Let's take a look at the data set.
 
-```{simdata, eval = FALSE, echo = FALSE, include = FALSE}
+```{r, eval = FALSE, echo = FALSE, include = FALSE}
 set.seed(21214)
 detpredictor1 <- runif(50, 0, 1)
 detpredictor2 <- runif(50, -2, 2)
@@ -107,13 +107,14 @@ countdf$areavar <- rep(2, ncount)
 countdford <- countdf[reorderindx, ]
 colnames(countdford) <- c("Xcoords", "Ycoords", "Moose", "CountPred",
   "DetPred1", "DetPred2", "Stratum", "Area")
-sampledsiteindx <- c(sample(which(countdford$Stratum == "High"), size = 60, replace = FALSE), sample(which(countdford$Stratum == "High"), size = 40, replace = FALSE))
-countdford[-sampledsiteindx, ]$Moose <- NA
+sampledsiteindx <- c(sample(which(countdford$Stratum == "High"), size = 60, replace = FALSE), sample(which(countdford$Stratum == "Low"), size = 40, replace = FALSE))
+countdford$Moose
+countdford$Moose[-sampledsiteindx] <- NA
 
 write.csv(countdford, "vignettecount.csv")
 ```
 
-```{showdata, echo = FALSE}
+```{r, echo = FALSE}
 simdf <- read.csv("vignettecount.csv")
 pander(head(simdf[ ,c("Xcoords", "Ycoords", "Moose",
   "CountPred", "Stratum")]))
@@ -125,7 +126,7 @@ _Note_: Both the `R` package and the `Shiny` app assume that any site that is no
 
 We might also want to look at a grid to see where our sampled sites are.
 
-```{showgrid, echo=FALSE}
+```{r, echo=FALSE, fig.height=4, fig.width=6}
 minxdist <- min(dist(simdf$Xcoords)[dist(simdf$Ycoords) != 0])
 minydist <- min(dist(simdf$Xcoords)[dist(simdf$Ycoords) != 0])
 simdf$sampind <- factor(is.na(simdf$Moose))
@@ -144,7 +145,7 @@ print(p3)
 
 We can also look at a grid showing which sites were stratified into the high stratum and which were stratified into the low stratum.
 
-```{stratgrid, echo=FALSE}
+```{r, echo=FALSE, fig.height=4, fig.width=6}
 stratgrid <- ggplot(data = simdf, aes(x = Xcoords, y = Ycoords,
   colour = Stratum)) +
   scale_colour_viridis_d("Stratum", begin = 0.2,
@@ -157,50 +158,104 @@ print(stratgrid)
 
 ## Section 1: Assuming Perfect Detection
 
-Let's first assume that we have perfect sightability. Then, in the `Shiny` app, we can completely ignore the "Radiocollar Sightability" tab and focus only on the "GSPE" tab. 
-
 #### Step 1: Load the `Shiny` app.
 
 You will need to open `R` or `RStudio` on your personal desktop and run the following lines of code:
 
-```{r, echo=TRUE, eval=FALSE, warning=FALSE, message=FALSE}
-## will also need to install the shiny package if you have not done 
+```{r, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+## will also need to install the shiny package 
+## and the shinyFiles package if you have not done 
 ## so ever before on your current machine.
 
+## You only need to install the packages once. Uncomment the lines
+## by deleting the two hashtags.
 ## install.packages("shiny")
+## install.packages("shinyFiles")
 library(shiny)
-
-## running this line should open a web browser with the Shiny app.
-runGitHub("Shiny-FPBK", "highamm")
 ```
+
+```{r, echo=TRUE, eval=FALSE}
+## install the R Package here
+devtools::install_git("https://github.com/highamm/FPBKPack2.git")
+```
+
+This installs the `R` package needed to run the `Shiny` app. Next, we will copy the files that generate the `Shiny` app onto your personal computer. You may want to modify the `destdir` argument so that the code creates a folder at a different location of your computer. Currently, running the line of code will create a folder titled "appfolder" on my Desktop.
+
+```{r, echo=TRUE, eval=FALSE}
+## running this line should open a web browser with the Shiny app.
+runGitHub("Shiny-FPBK", "highamm", destdir = "~/Desktop/appfolder",
+  launch.browser = TRUE)
+```
+
+If all goes well, you should see something pop up in your browser like this:
+
+
+The question is old, but still receives a lot of attention. As the existing answers are outdated, here a more up-to-date solution:
+
+Resizing local images
+As of knitr 1.12, there is the function include_graphics. From ?include_graphics (emphasis mine):
+
+The major advantage of using this function is that it is portable in the sense that it works for all document formats that knitr supports, so you do not need to think if you have to use, for example, LaTeX or Markdown syntax, to embed an external image. Chunk options related to graphics output that work for normal R plots also work for these images, such as out.width and out.height.
+
+Example:
+
+```{r, out.width = "700px"}
+knitr::include_graphics("Shinystart.png")
+```
+
+<!-- ![First Screen of Shiny App](Shinystart.png) -->
+
+Let's first assume that we have perfect sightability. Then, in the `Shiny` app, we can completely ignore the "Radiocollar Sightability" tab and focus only on the "GSPE" tab. 
 
 #### Step 2: Upload Your Data
 
 Your data should be in a .csv file. Click the Browse button on the `Shiny` app, finding your .csv file on your local computer. After uploading the data set, you should see a header of the data with the first 6 lines of your .csv file pop up on the main window of the app. Looking at the first 6 lines is a nice way to verify that your data has uploaded correctly.
 
+_Tip_: If you have a lot of extra variables in your .csv file, the `Shiny` app will generally be harder to work with. For example, each variable will be a candidate predictor for the total count so there will be a ton of checkboxes under the `Select Predictors` heading. You might want to consider saving a version of the data with only what you will need in the app (counts, site ID numbers, coordinates, relevant predictors, stratification column, etc.) and get rid of unnecessary columns (notes, for example).
+
+If all goes well, you should see a header of your data appear, as in
+
+```{r, out.width = "700px"}
+knitr::include_graphics("Headingscreenshot.png")
+```
+
+<!-- ![Header of Count Data](Headingscreenshot.png) -->
+
 #### Step 3: Change the App Inputs
 
-Next, we need to tell the `Shiny` app what column in our data has the counts, which columns have covariates for predicting the response (if any), which column has the stratification variable, and which columns have the spatial X and Y coordinates. If the X and Y coordinates are in Latitude and Longitude format, then we also would need to check the box indicating that the coordinates are in that format. The `Shiny` app converts Lat/Lon coordinates to TM coordinates for spatial prediction. 
+Next, we need to tell the `Shiny` app which column in our data has the counts, which columns have covariates for predicting the response (if any), which column has the stratification variable, and which columns have the spatial X and Y coordinates. If the X and Y coordinates are in Latitude and Longitude format, then we also would need to check the box indicating that the coordinates are in that format. The `Shiny` app converts Lat/Lon coordinates to TM coordinates for spatial prediction. 
+
+_Note_: When including stratification, there are two options:
+
+1. Stratum can be selected under the `Stratification column` drop-down menu. This option is what the Winfonet application does, fitting separate covariance models for each stratum. If the high stratum has more variability than the low stratum (which is usually the case), this is the option you would want to select.
+
+2. Stratum can be chosen as a predictor under `Predictors`. This fits the same covariance model to both stratum, but lets the stratum have different means.
+
+Stratum should only be entered using option 1 or option 2, but __not__ both. 
 
 There are a few extra optional arguments to check. If the areas of your sites are different, then you can choose the name of your `Area` column within the app. The other arguments have to do with detection so we will skip those for now. Once you have chosen everything, click the __Submit__ button near the bottom of the webpage. If everything is okay, you should see some `R` output in the main panel of the app. If not, make sure all of the inputs are specifying the correct columns and then click the __Submit__ button again.
 
+The following is what is obtained using the sample data set, with `Moose` as the response, `CountPred` as a predictor (make sure to uncheck None!), `Xcoords` as the x-coordinate column, `Ycoords` as the y-coordinate column, and `Stratum` as the Stratification column.
+
+```{r, out.width = "700px"}
+knitr::include_graphics("InitialOutput.png")
+```
+
+<!-- ![Initial Output](InitialOutput.png) -->
+
+We see that the predicted total is about 4540 moose for the entire region.
+
 #### Step 4: Get a Report and a Data Frame with Site-by-site Predictions
 
-The `R` output in the main panel is not "pretty" and really only serves as a check to make sure everything went okay with the uploaded data. The __Get Report__ button will generate a nice-looking report while the __Get_Prediction_Data__ button will generate a .csv file with the original data as well as site-by-site predictions and a few other appended columns. 
+The `R` output in the main panel is not "pretty" and really only serves as a check to make sure everything went okay with the uploaded data. The __Get Report__ button will generate a nice-looking report while the __Get_Prediction_Data__ button will generate a .csv file with the original data as well as site-by-site predictions and a few other appended columns. The report and prediction data set will be in the folder that you made in the very first step using the `runGitHub` function. The report is in HTML format with a title "report.date_of_today.html". The data set is named "predictions.csv". 
 
 ```{r}
 ## Next Steps:
-## 
-## could add the Lat/Lon option back into the package to make the
-## Shiny app easier....
-## Also need to add in option to predict the total for a subset 
-## of a region
-## Need to add adjustment to using the same detection data
-## across strata
-## Need to create a helper function that takes a shapefile
-## and creates a map with predictions....probably using
-## a 4th tab, where the user must input the data set
-## generated from the Shiny app in the 1st tab.
+
+## add something to the package that checks to see if any
+## of the spatial coordinates are NA
+
+
 
 ## 2. Make tables and graphs showing the example count data set
 ## 3. Begin with perfect detection in the vignette
@@ -214,7 +269,100 @@ The `R` output in the main panel is not "pretty" and really only serves as a che
 
 ```
 
-```{TogiakData, echo = FALSE, eval = FALSE}
+## Section 2: Assuming Constant Detection
+
+Depending on the study region, it might be reasonable to assume that detection is constant across the region of interest. That is, though detection is not perfect, sightability issues are about the same no matter which site we are at. 
+
+If this is the case, repeat the steps of Section 1 with a few minor modifications to __Step 3__. Now, choose an estimated mean detection between 0 and 1 and enter this value in the __Enter Estimated Detection__ input box. Also, enter a standard error for the estimated mean detection in the __Enter Standard Error for Detection__ input box. 
+
+If you are using radiocollar data without any predictors for detection, the estimated detection and associated standard error can be found using the following `R` code.
+
+```{r, echo=TRUE, eval=FALSE}
+X <- enter_number_of_sighted_moose
+n <- enter_number_of_radiocollar_trials
+
+p_hat <- X / n
+SE <- sqrt(p_hat * (1 - p_hat) / n)
+
+p_hat
+SE
+```
+
+After clicking the submit button, proceed to Step 4. The predicted total in the Report should be higher when entering in an estimated detection than when assuming that the detection probability is equal to 1. 
+
+For the same dataset in the perfect detection section and an estimated detection of 0.6 with a standard error of 0.04, you should obtain output similar to the following, with a prediction for the total number of moose around 7500 (which makes sense, given that our predicted total assuming perfect detection was about 4500: $\frac{4500}{0.6} \approx 7500$).
+
+```{r, out.width = "700px"}
+knitr::include_graphics("Constantdetection.png")
+```
+
+<!-- ![Constant Detection Output](Constantdetection.png) -->
+
+The Report and Prediction Data set can then be generated by clicking the "Get Report" and "Get Prediction Data" tabs, respectively.
+
+## Section 3: Non-constant Detection with Radiocollar Data
+
+If we have radiocollar data, then we can incorporate this type of sightability data into the prediction for a population total (or some other prediction). We will follow the same structure of Steps as in Section 1, with a couple of changes.
+
+####Step 1.5: Upload your Sightability Data and Select App Inputs
+
+* After loading the `Shiny` app, but before uploading your count data set, click the __Radiocollar Sightability__ tab. 
+
+* Select "Browse" and choose your .csv file with the sightability data.
+
+* The detection column should be a column of 1's and 0's, with a 1 denoting an animal that was successfully sighted and a 0 denoting an animal that was not successfully sighted.
+
+* If there are covariates useful for predicting detection, select these predictors from the __Detection Predictors__ checkboxes. 
+
+* Click __Submit__. If all goes well, you should see some `R` output in the main panel of the `Shiny` app.
+
+* Without closing the `Shiny` app, click the __GSPE__ tab and proceed with steps 2-4 of Section 1.
+
+* \emph{Note}: When inputting information on the __GSPE__ tab, it is important to not change the Mean Detection or Standard Error for Detection inputs. Changing these essentially results in double counting for imperfect detection (one adjustment is made using the radiocollar data and then a second adjustment is made using the mean detection).
+
+* \emph{Note}: If you have predictors for detection in the radiocollar sightability data set, the count data set must also have columns with these predictors, __with the same exact names__ (and `R` is case sensitive!). For example, if I have a predictor called `prop_of_birch` in the radiocollar data set, then I must have a column titled `prop_of_birch` in the count data set that has the Proportion of Birch at all of the sites.
+
+If using the example data sets, `vignettecount.csv` and `vignettedetection.csv`, you should obtain output similar to the following when using the Radiocollar Sightability tab with `Detected` as the response and `DetPred1` and `DetPred2` as predictors:
+
+```{r, out.width = "700px"}
+knitr::include_graphics("RadiocollarResults.png")
+```
+
+<!-- ![Radiocollar Detection Results](RadiocollarResults.png) -->
+
+If you are familiar with logistic regression, then you can interpret the coefficient estimates, `coefs`.
+
+Then, after uploading the `vignettecount.csv` file in the GSPE tab and inputting the same variables for the counts, coordinates, count predictors (`CountPred`), and stratification that we did in Section 1, you should obtain the following output:
+
+```{r, out.width = "700px"}
+knitr::include_graphics("Fullmodeloutput.png")
+```
+
+<!-- ![Output Using Radiocollar Data](Fullmodeloutput.png) -->
+
+_Note_: There are two kinds of predictors that the app can handle: predictors for detection and predictors for the count total. Predictors for detection go in the "Radiocollar" tab while predictors for counts go in the "GSPE" tab. 
+
+## Extra Inputs
+
+* `Area`: if your sites have differing areas, then choose the column with your site areas in the "Area" input of the `Shiny` app. Internally, the `R` package will convert your areas to densities, predict densities at all of the sites, and then transform the densities back to count predictions at the end. Therefore, the regression coefficients, covariance parameter estimates, etc. that appear in the `Shiny` app output will be for densities so don't worry if they seem different than what you would expect for your count data.
+
+* `Latitude / Longitude?`: There is an option to indicate that your x and y coordinates are in longitude / latitude form. If checked, the package will convert the coordinates into Trans-Mercator form (TM), which is more appropriate for kriging.
+
+* `Prediction Weight Column`: If you would like to predict something other than the total number in your region of interest, then you need to put the prediction weights into the prediction weight column. The most common need for this might be to predict the total number of moose in a game management unit (GMU). Then, the prediction weight column should have a `1` for any observation within the GMU of interest and a `0` for any observation not within the GMU of interest.
+
+##### `Map with Shapefile`
+
+Finally, the grid or predictions in the HTML output is only a scatterplot coloured by the predicted values with different shapes for whether or not a site was sampled. The .csv file that is uploaded with the prediction data does not have the spatial information necessary to make a more complete map of the predictions. If you have a shapefile along with its associate files (.shp, .dbf, .shx, and .prj) along with the data set with predictions generated from the "Get Prediction Data" button, you can upload both sets of files in the Map with Shapefile tab. 
+
+What is crucial is that there is an ID number in the shapefile that matches ID numbers in the prediction data set. The common site ID numbers is how the `Shiny` app merges the two data sets so that the predictions go to the correct sites. 
+
+_Note_: When uploading the .shp, .dbf, .shx, and .prj files, you must upload all of the files at the __same__ time.
+
+Select the matching ID columns in the shapefile and in the prediction data set as well as the column with the predictions and then click the Submit button. If successful, a map should appear in the `Shiny` browser window. The map will automatically be saved in the folder you created in the Section 1 `runGitHub` step.
+
+ALternatively, you can also make the map yourself using GIS software, Python, or some other software because the prediction data set is always output to a .csv file.
+
+```{r, echo = FALSE, eval = FALSE}
 library(devtools)
 devtools::install_git("https://github.com/highamm/FPBKPack2.git")
 library(FPBKPack2)
@@ -261,31 +409,3 @@ knitr::kable(alldfdisplay)
 ```{r, include=TRUE, fig.align="center", fig.cap=c("Togiak Stratifiacation"), echo=FALSE, eval = FALSE}
 knitr::include_graphics("strat1-1.pdf")
 ```
-
-## Section 2: Assuming Constant Detection
-
-Depending on the study region, it might be reasonable to assume that detection is constant across the region of interest. That is, though detection is not perfect, sightability issues are about the same no matter which site we are at. 
-
-If this is the case, repeat the steps of Section 1 with a few minor modifications to __Step 3__. Now, choose an estimated mean detection between 0 and 1 and enter this value in the __Enter Estimated Detection__ input box. Also, enter a standard error for the estimated mean detection in the __Enter Standard Error for Detection__ input box. 
-
-After clicking the submit button, proceed to Step 4. The predicted total in the Report should be higher when entering in an estimated detection than when assuming that the detection probability is equal to 1. 
-
-## Section 3: Non-constant Detection with Radiocollar Data
-
-If we have radiocollar data, then we can incorporate this type of sightability data into the prediction for a population total (or some other prediction). We will follow the same structure of Steps as in Section 1, with a couple of changes.
-
-####Step 1.5: Upload your Sightability Data and Select App Inputs
-
-* After loading the `Shiny` app, but before uploading your count data set, click the __Radiocollar Sightability__ tab. 
-
-* Select "Browse" and choose your .csv file with the sightability data.
-
-* The detection column should be a column of 1's and 0's, with a 1 denoting an animal that was successfully sighted and a 0 denoting an animal that was not successfully sighted.
-
-* If there are covariates useful for predicting detection, select these predictors from the __Detection Predictors__ checkboxes. 
-
-* Click __Submit__. If all goes well, you should see some `R` output in the main panel of the `Shiny` app.
-
-* Without closing the `Shiny` app, click the __GSPE__ tab and proceed with steps 2-4 of Section 1.
-
-* \emph{Note}: When inputting information on the __GSPE__ tab, it is important to not change the Mean Detection or Standard Error for Detection inputs. Changing these essentially results in double counting for imperfect detection (one adjustment is made using the radiocollar data and then a second adjustment is made using the mean detection).
