@@ -529,8 +529,8 @@ server <- function(input, output, session) {
       return()
     } else {
       
-    shapefort <- broom::tidy(shapereact(),
-      region = input$shapeid)
+    shapefort <- suppressWarnings(broom::tidy(shapereact(),
+      region = input$shapeid))
     
     coorddf <- sp::SpatialPointsDataFrame(data = shapefort,
       coords = cbind(shapefort$long,
